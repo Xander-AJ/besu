@@ -16,7 +16,9 @@ package org.hyperledger.besu.ethereum.api.jsonrpc.internal;
 
 import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType.INTERNAL_ERROR;
 import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType.UNKNOWN_BLOCK;
+import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType.WORLD_STATE_UNAVAILABLE;
 
+import org.hyperledger.besu.ethereum.BlockProcessingResult;
 import org.hyperledger.besu.ethereum.ProtocolContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.exception.InvalidJsonRpcParameters;
@@ -85,17 +87,24 @@ public class DebugReplayBlock extends AbstractBlockParameterMethod {
 
     try {
       // replay block and persist it
-      protocolSchedule
-          .getByBlockHeader(block.getHeader())
-          .getBlockValidator()
-          .validateAndProcessBlock(
-              protocolContext,
-              block,
-              HeaderValidationMode.FULL,
-              HeaderValidationMode.NONE,
-              Optional.empty(),
-              InclusionListTransactions.EMPTY,
-              true);
+      final BlockProcessingResult result =
+          protocolSchedule
+              .getByBlockHeader(block.getHeader())
+              .getBlockValidator()
+              .validateAndProcessBlock(
+                  protocolContext,
+                  block,
+                  HeaderValidationMode.FULL,
+                  HeaderValidationMode.NONE,
+                  Optional.empty(),
+                  InclusionListTransactions.EMPTY,
+                  true);
+      if (!result.isSuccessful()) {
+        LOG.error("Failed to replay block {}: {}", blockNumber, result.errorMessage);
+        return new JsonRpcErrorResponse(
+            request.getRequest().getId(),
+            result.isWorldStateUnavailable() ? WORLD_STATE_UNAVAILABLE : INTERNAL_ERROR);
+      }
     } catch (Exception e) {
       LOG.error(e.getMessage());
       return new JsonRpcErrorResponse(request.getRequest().getId(), INTERNAL_ERROR);

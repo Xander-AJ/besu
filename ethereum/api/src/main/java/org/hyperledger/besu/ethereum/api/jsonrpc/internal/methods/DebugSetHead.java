@@ -92,6 +92,11 @@ public class DebugSetHead extends AbstractBlockParameterOrBlockHashMethod {
 
       // Only PathBasedWorldState's need to be moved:
       if (archive instanceof PathBasedWorldStateProvider pathBasedArchive) {
+        if (!pathBasedArchive.isWorldStateAvailable(
+            maybeBlockHeader.get().getStateRoot(), maybeBlockHeader.get().getBlockHash())) {
+          return new JsonRpcErrorResponse(
+              request.getRequest().getId(), RpcErrorType.WORLD_STATE_UNAVAILABLE);
+        }
         if (rollIncrementally(maybeBlockHeader.get(), blockchain, pathBasedArchive)) {
           return JsonRpcSuccessResponse.SUCCESS_RESULT;
         }

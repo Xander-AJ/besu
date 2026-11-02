@@ -17,6 +17,9 @@ package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 import static java.lang.Boolean.FALSE;
 import static java.lang.Boolean.TRUE;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.crypto.Hash;
 import org.hyperledger.besu.ethereum.ProtocolContext;
@@ -24,12 +27,15 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.AbstractJsonRpcHttpServiceTest;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequest;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.BlockParameterOrBlockHash;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.provider.PathBasedWorldStateProvider;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
 import org.hyperledger.besu.plugin.services.rpc.RpcResponseType;
 
@@ -175,6 +181,29 @@ public class DebugSetHeadTest extends AbstractJsonRpcHttpServiceTest {
     // assert neither the chain nor the worldstate moved
     assertThat(newChainTip).isEqualTo(chainTip);
     assertThat(archive.getWorldState().rootHash()).isEqualTo(chainTip.getStateRoot());
+  }
+
+  @Test
+  public void assertErrorWhenWorldStateUnavailable() {
+    var chainTip = blockchain.getChainHead().getBlockHeader();
+    var unavailableArchive = mock(PathBasedWorldStateProvider.class);
+    when(unavailableArchive.isWorldStateAvailable(any(), any())).thenReturn(false);
+    var unavailableSetHead =
+        new DebugSetHead(
+            new BlockchainQueries(
+                protocolSchedule,
+                blockchain,
+                unavailableArchive,
+                MiningConfiguration.MINING_DISABLED),
+            protocolContext,
+            2);
+
+    var resp = unavailableSetHead.response(debugSetHead("0x01", Optional.of(TRUE)));
+
+    assertThat(resp.getType()).isEqualTo(RpcResponseType.ERROR);
+    assertThat(((JsonRpcErrorResponse) resp).getErrorType())
+        .isEqualTo(RpcErrorType.WORLD_STATE_UNAVAILABLE);
+    assertThat(blockchain.getChainHead().getBlockHeader()).isEqualTo(chainTip);
   }
 
   private JsonRpcRequestContext debugSetHead(
